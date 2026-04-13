@@ -7,21 +7,21 @@
 ╚══════╝╚══════╝ ╚═════╝ ╚═════╝ ╚═╝  ╚═╝╚══════╝ ╚═════╝╚═╝
 ```
 
-**Автоматический сканер безопасности для Pull Request'ов**
+**Automated security scanner for Pull Requests**
 
-Мы начали строить SecureCI из личной боли: работаем в команде без Security Engineer'а, и каждый раз когда PR мерджится, никто не проверяет код на уязвимости.
+We started building SecureCI from personal pain: working on a team without a Security Engineer, and every time a PR is merged, no one checks the code for vulnerabilities.
 
-SecureCI запускает 4 сканера параллельно: SAST (Semgrep), проверка зависимостей (CVE), AI-анализ (Claude), OWASP чеклист. Через 60 секунд — отчет с находками.
+SecureCI runs 4 scanners in parallel: SAST (Semgrep), dependency check (CVE), AI analysis (Claude), OWASP checklist. In 60 seconds — report with findings.
 
-**Без Security Engineer'а. Без $25K/год на Snyk.**
+**No Security Engineer needed. No $25K/year for Snyk.**
 
-Связанный проект: [ChakLoad-CLI](https://github.com/Aisrefot-Reed/ChakLoad-CLI) - нагрузочное тестирование.
+Related project: [ChakLoad-CLI](https://github.com/Aisrefot-Reed/ChakLoad-CLI) - load testing tool.
 
 ---
 
-## 🚀 Быстрый старт
+## 🚀 Quick Start
 
-### GitHub Actions (рекомендуется)
+### GitHub Actions (recommended)
 
 ```yaml
 # .github/workflows/secureci.yml
@@ -43,43 +43,43 @@ jobs:
           fail-on: 'high'
 ```
 
-[Полная документация →](GITHUB_ACTIONS.md)
+[Full documentation →](GITHUB_ACTIONS.md)
 
-### CLI (локально)
+### CLI (local)
 
 ```bash
 npm install -g secureci
 
-# Интерактивное меню
+# Interactive menu
 secure-ci
 
-# Прямое сканирование
+# Direct scan
 secure-ci scan ./src --fail-on high
 
-# SARIF для GitHub Security
+# SARIF for GitHub Security
 secure-ci scan --sarif
 ```
 
-## 📋 Команды
+## 📋 Commands
 
 ```bash
-secure-ci              # Интерактивное меню (локально)
-secure-ci scan         # Сканирование (CI/CD)
-secure-ci scan --json  # JSON вывод
-secure-ci scan --sarif # SARIF для GitHub Security
-secure-ci scan --pr    # Пост комментария в PR
-secure-ci install      # Установка Semgrep/OSV
-secure-ci init         # Создать .secureci.yml
+secure-ci              # Interactive menu (local)
+secure-ci scan         # Scan (CI/CD)
+secure-ci scan --json  # JSON output
+secure-ci scan --sarif # SARIF for GitHub Security
+secure-ci scan --pr    # Post PR comment
+secure-ci install      # Install Semgrep/OSV
+secure-ci init         # Create .secureci.yml
 ```
 
-## 📊 Exit коды
+## 📊 Exit Codes
 
-- `0` - Чисто, нет проблем
-- `1` - Найдены проблемы
+- `0` - Clean, no issues
+- `1` - Issues found
 
-CI системы используют это для определения статуса.
+CI systems use this to determine status.
 
-## 📁 Структура
+## 📁 Structure
 
 ```
 secureci/
@@ -93,21 +93,21 @@ secureci/
 └── apps/dashboard/           # Next.js dashboard
 ```
 
-## 🔒 Детектируемые уязвимости
+## 🔒 Detected Vulnerabilities
 
-- Захардкоженные пароли, API ключи, JWT секреты
-- SQL injection паттерны
-- Использование eval()
-- Небезопасные HTTP эндпоинты
-- Логирование чувствительных данных
-- .env файлы в коммитах
+- Hardcoded passwords, API keys, JWT secrets
+- SQL injection patterns
+- eval() usage
+- Insecure HTTP endpoints
+- Sensitive data in logs
+- .env files in commits
 
-## 🤝 Обратная связь
+## 🤝 Feedback
 
-Если вы разработчик или DevOps в небольшой команде — дайте знать, хотелось бы поговорить о вашем опыте с безопасностью в CI/CD.
+If you're a developer or DevOps in a small team — let us know, we'd love to talk about your experience with security in CI/CD.
 
 **#devsecops #secureci #devtools #opensource #chakbild**
 
-## 📄 Лицензия
+## 📄 License
 
 MIT
