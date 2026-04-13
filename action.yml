@@ -1,0 +1,217 @@
+name: 'SecureCI Security Scanner'
+description: 'Automated security scanner for Pull Requests - SAST, Dependencies, AI Analysis, and OWASP Checklist'
+author: 'SecureCI Team'
+
+branding:
+  icon: 'shield'
+  color: 'blue'
+
+inputs:
+  path:
+    description: 'Path to scan (default: current directory)'
+    required: false
+    default: '.'
+  
+  fail-on:
+    description: 'Fail on severity level: critical, high, medium, low, info'
+    required: false
+    default: 'high'
+  
+  output-format:
+    description: 'Output format: text, json, sarif'
+    required: false
+    default: 'text'
+  
+  enable-sast:
+    description: 'Enable SAST scanning with Semgrep'
+    required: false
+    default: 'true'
+  
+  enable-deps:
+    description: 'Enable dependency scanning'
+    required: false
+    default: 'true'
+  
+  enable-ai:
+    description: 'Enable AI analysis with Claude'
+    required: false
+    default: 'false'
+  
+  enable-checklist:
+    description: 'Enable OWASP checklist scanning'
+    required: false
+    default: 'true'
+  
+  anthropic-api-key:
+    description: 'Anthropic API key for AI analysis (required if enable-ai is true)'
+    required: false
+  
+  post-comment:
+    description: 'Post results as PR comment'
+    required: false
+    default: 'true'
+  
+  github-token:
+    description: 'GitHub token for posting comments'
+    required: false
+    default: ${{ github.token }}
+
+outputs:
+  passed:
+    description: 'Whether the scan passed (true/false)'
+  
+  findings-count:
+    description: 'Total number of findings'
+  
+  critical-count:
+    description: 'Number of critical findings'
+  
+  high-count:
+    description: 'Number of high severity findings'
+  
+  sarif-file:
+    description: 'Path to SARIF output file (if output-format is sarif)'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '20'
+    
+    - name: Setup Python
+      if: inputs.enable-sast == 'true'
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install Semgrep
+      if: inputs.enable-sast == 'true'
+      shell: bash
+      run: pip install semgrep
+    
+    - name: Setup Go
+      if: inputs.enable-deps == 'true'
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.21'
+    
+    - name: Install OSV Scanner
+      if: inputs.enable-deps == 'true'
+      shell: bash
+      run: go install github.com/google/osv-scanner/cmd/osv-scanner@latest
+    
+    - name: Install SecureCI
+      shell: bash
+      run: npm install -g secureci
+    
+    - name: Create config
+      shell: bash
+      run: |
+        cat > .secureci.yml << EOF
+        fail_on_severity: ${{ inputs.fail-on }}
+        modules:
+          sast: ${{ inputs.enable-sast }}
+          deps: ${{ inputs.enable-deps }}
+          ai: ${{ inputs.enable-ai }}
+          checklist: ${{ inputs.enable-checklist }}
+        semgrep_rules:
+          - p/owasp-top-ten
+          - p/nodejs-scan
+          - p/python
+        EOF
+        
+        if [ "${{ inputs.enable-ai }}" == "true" ] && [ -n "${{ inputs.anthropic-api-key }}" ]; then
+          echo "anthropic_api_key: ${{ inputs.anthropic-api-key }}" >> .secureci.yml
+        fi
+    
+    - name: Run SecureCI Scan
+      id: scan
+      shell: bash
+      run: |
+        set +e
+        
+        if [ "${{ inputs.output-format }}" == "sarif" ]; then
+          secure-ci scan ${{ inputs.path }} --sarif --fail-on ${{ inputs.fail-on }} > secureci-results.sarif
+          SCAN_EXIT=$?
+          echo "sarif-file=secureci-results.sarif" >> $GITHUB_OUTPUT
+        elif [ "${{ inputs.output-format }}" == "json" ]; then
+          secure-ci scan ${{ inputs.path }} --json --fail-on ${{ inputs.fail-on }} > secureci-results.json
+          SCAN_EXIT=$?
+        else
+          secure-ci scan ${{ inputs.path }} --fail-on ${{ inputs.fail-on }}
+          SCAN_EXIT=$?
+        fi
+        
+        if [ $SCAN_EXIT -eq 0 ]; then
+          echo "passed=true" >> $GITHUB_OUTPUT
+        else
+          echo "passed=false" >> $GITHUB_OUTPUT
+        fi
+        
+        exit $SCAN_EXIT
+    
+    - name: Upload SARIF results
+      if: inputs.output-format == 'sarif' && always()
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: secureci-results.sarif
+        category: secureci
+    
+    - name: Post PR Comment
+      if: inputs.post-comment == 'true' && github.event_name == 'pull_request' && always()
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const fs = require('fs');
+          let results;
+          
+          try {
+            if ('${{ inputs.output-format }}' === 'json') {
+              results = JSON.parse(fs.readFileSync('secureci-results.json', 'utf8'));
+            } else {
+              // For text output, we'll create a simple comment
+              results = { passed: '${{ steps.scan.outputs.passed }}' === 'true' };
+            }
+          } catch (e) {
+            console.log('Could not read results file');
+            return;
+          }
+          
+          const passed = results.passed;
+          const emoji = passed ? '✅' : '❌';
+          const status = passed ? 'PASSED' : 'FAILED';
+          
+          let body = `## ${emoji} SecureCI Security Scan ${status}\n\n`;
+          
+          if (results.summary) {
+            body += `### Summary\n`;
+            body += `- 🔴 Critical: ${results.summary.critical}\n`;
+            body += `- 🟠 High: ${results.summary.high}\n`;
+            body += `- 🟡 Medium: ${results.summary.medium}\n`;
+            body += `- 🔵 Low: ${results.summary.low}\n`;
+            body += `- ℹ️ Info: ${results.summary.info}\n\n`;
+            
+            if (results.findings && results.findings.length > 0) {
+              body += `### Top Findings\n\n`;
+              results.findings.slice(0, 5).forEach(f => {
+                body += `- **${f.severity.toUpperCase()}**: ${f.title}\n`;
+                body += `  - ${f.description}\n`;
+                if (f.file) body += `  - File: \`${f.file}${f.line ? ':' + f.line : ''}\`\n`;
+                body += `\n`;
+              });
+            }
+          }
+          
+          body += `\n---\n`;
+          body += `Scanned at: ${new Date().toISOString()}\n`;
+          body += `Fail threshold: ${{ inputs.fail-on }}\n`;
+          
+          await github.rest.issues.createComment({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            issue_number: context.issue.number,
+            body: body
+          });
